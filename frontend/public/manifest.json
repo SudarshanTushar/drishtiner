@@ -1,0 +1,16 @@
+{
+  "name": "RouteAI-NE Commander",
+  "short_name": "RouteAI",
+  "start_url": ".",
+  "display": "standalone",
+  "background_color": "#0f172a",
+  "theme_color": "#0f172a",
+  "description": "Offline-first Logistics Grid for North East India",
+  "icons": [
+    {
+      "src": "favicon.ico",
+      "sizes": "64x64 32x32 24x24 16x16",
+      "type": "image/x-icon"
+    }
+  ]
+}
