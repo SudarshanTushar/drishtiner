@@ -128,13 +128,13 @@ export default function App() {
         </div>
       </div>
 
-      {/* --- MAIN LAYOUT (UPDATED FOR MOBILE) --- */}
-      {/* Changed: flex-col for mobile, md:flex-row for desktop */}
+      {/* --- MAIN LAYOUT --- */}
+      {/* FIX: Use flex-col for Mobile, flex-row for Desktop */}
       <div className="flex flex-col md:flex-row flex-1 overflow-hidden relative">
         
         {/* --- SIDEBAR (CONTROLS) --- */}
-        {/* Changed: w-full and h-[35vh] for mobile. w-80 and h-full for desktop */}
-        <div className="w-full md:w-80 h-[35vh] md:h-full bg-slate-800 p-4 flex flex-col gap-5 z-40 shadow-xl border-b md:border-b-0 md:border-r border-slate-700 shrink-0 overflow-y-auto">
+        {/* FIX: Full width on mobile with fixed height (40vh). Fixed width (80) on desktop. */}
+        <div className="w-full h-[40vh] md:w-80 md:h-full bg-slate-800 p-4 flex flex-col gap-4 z-40 shadow-xl border-b md:border-b-0 md:border-r border-slate-700 shrink-0 overflow-y-auto">
           
           {/* CITY SELECTORS */}
           <div className="space-y-3">
@@ -201,8 +201,8 @@ export default function App() {
         </div>
 
         {/* --- MAIN DISPLAY AREA --- */}
-        {/* Changed: h-[65vh] for mobile to take remaining space, h-full for desktop */}
-        <div className="flex-1 relative bg-slate-950 h-[65vh] md:h-full">
+        {/* FIX: Takes remaining height (60vh) on mobile, Full height on desktop */}
+        <div className="flex-1 relative bg-slate-950 h-[60vh] md:h-full overflow-hidden">
           
           {view === "MAP" ? (
              <MapContainer center={[26.1, 92]} zoom={7} style={{ height: '100%', width: '100%', background: '#020617' }}>
@@ -235,11 +235,11 @@ export default function App() {
             // --- ANALYTICS DASHBOARD VIEW ---
             <div className="h-full w-full p-4 md:p-8 overflow-y-auto text-slate-200">
               <div className="max-w-5xl mx-auto">
-                <h2 className="text-3xl font-black mb-8 tracking-tight flex items-center gap-3">
+                <h2 className="text-3xl font-black mb-6 md:mb-8 tracking-tight flex items-center gap-3">
                    <span className="text-blue-500 bg-blue-900/30 p-2 rounded-lg">📊</span> Tactical Intelligence
                 </h2>
                 
-                <div className="grid grid-cols-1 md:grid-cols-3 gap-6 mb-8">
+                <div className="grid grid-cols-1 md:grid-cols-3 gap-4 md:gap-6 mb-6 md:mb-8">
                    <div className="bg-slate-800 p-6 rounded-2xl border border-slate-700 hover:border-slate-500 transition-colors">
                       <div className="text-slate-500 text-[10px] font-bold uppercase tracking-widest mb-1">Active Risk Index</div>
                       <div className="text-5xl font-black text-red-400">0.84</div>
@@ -255,8 +255,8 @@ export default function App() {
                 </div>
 
                 {/* THE BIG CHART */}
-                {/* Changed: h-[300px] for mobile fit, h-[450px] for desktop */}
-                <div className="bg-slate-800 p-4 md:p-8 rounded-2xl border border-slate-700 h-[300px] md:h-[450px] flex flex-col shadow-2xl">
+                {/* FIX: Height adjusted for Mobile (300px) vs Desktop (450px) */}
+                <div className="bg-slate-800 p-4 md:p-8 rounded-2xl border border-slate-700 h-[300px] md:h-[450px] flex flex-col shadow-2xl mb-8">
                   <h3 className="font-bold text-slate-400 mb-6 uppercase tracking-widest text-xs flex justify-between">
                     <span>Landslide Probability Forecast (24h)</span>
                     <span className="text-slate-600">SOURCE: RANDOM FOREST v1.2</span>
