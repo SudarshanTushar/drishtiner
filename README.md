@@ -2,7 +2,7 @@
 
 The system follows a **Fail-Safe, Offline-First** architecture designed for low-connectivity Himalayan regions.
 
-```mermaid
+
 graph TD
     User[🚑 Ambulance / Driver] -->|Offline-First App| Mobile[Mobile Client (React/PWA)]
     
