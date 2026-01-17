@@ -4,287 +4,293 @@ import L from 'leaflet';
 import 'leaflet/dist/leaflet.css';
 import axios from 'axios';
 import { NE_HUBS, findSafestPath } from './routingLogic';
-import { BarChart, Bar, XAxis, YAxis, Tooltip, ResponsiveContainer } from 'recharts';
+import { BarChart, Bar, XAxis, YAxis, Tooltip, ResponsiveContainer, AreaChart, Area } from 'recharts';
 
-// --- CUSTOM ICONS ---
+// --- ICONS & STYLES ---
 const createIcon = (emoji) => L.divIcon({
-  html: `<div style="font-size: 24px; line-height: 1; text-align: center; filter: drop-shadow(0 0 2px black);">${emoji}</div>`,
+  html: `<div style="font-size: 28px; filter: drop-shadow(0 4px 4px rgba(0,0,0,0.4));">${emoji}</div>`,
   className: "custom-icon",
-  iconSize: [30, 30],
-  iconAnchor: [15, 15]
+  iconSize: [40, 40],
+  iconAnchor: [20, 20]
 });
 
-// --- MAP HELPER: ZOOM TO ROUTE ---
+// --- HELPER: ZOOM MAP ---
 function MapRefresher({ path }) {
   const map = useMap();
   useEffect(() => {
     if (path && path.length > 0) {
       const bounds = L.latLngBounds(path.map(p => [p.lat, p.lng]));
-      map.fitBounds(bounds, { padding: [50, 50] });
+      map.fitBounds(bounds, { padding: [50, 80] }); // Adjusted padding for mobile
     }
   }, [path, map]);
   return null;
 }
 
 export default function App() {
-  const [view, setView] = useState("MAP"); // Toggles between MAP and DASHBOARD
+  const [activeTab, setActiveTab] = useState("MAP"); // MAP | INTEL
   const [startHub, setStartHub] = useState("Guwahati");
   const [endHub, setEndHub] = useState("Kohima");
   const [rain, setRain] = useState(50);
   const [routeData, setRouteData] = useState({ path: [], details: {} });
   const [isListening, setIsListening] = useState(false);
-  const [status, setStatus] = useState("ONLINE");
+  const [showControls, setShowControls] = useState(true); // Toggle bottom card
 
-  // --- 1. ROUTING ENGINE ---
+  // --- ROUTING ENGINE ---
   useEffect(() => {
     const result = findSafestPath(startHub, endHub, rain);
     if (result) setRouteData(result);
   }, [startHub, endHub, rain]);
 
-  // --- 2. VOICE ASSISTANT (THE "WOW" FACTOR) ---
-  const speak = (text) => {
-    if ('speechSynthesis' in window) {
-      window.speechSynthesis.cancel();
-      const utterance = new SpeechSynthesisUtterance(text);
-      utterance.rate = 1.1; // Slightly faster for military feel
-      window.speechSynthesis.speak(utterance);
-    }
-  };
-
+  // --- VOICE HANDLER ---
   const handleVoice = async () => {
     if (isListening) return;
     setIsListening(true);
-    setStatus("LISTENING...");
     
+    // Haptic Feedback (Vibrate phone) - works on most Android browsers
+    if (navigator.vibrate) navigator.vibrate(50);
+
     try {
       const stream = await navigator.mediaDevices.getUserMedia({ audio: true });
       const mediaRecorder = new MediaRecorder(stream);
       const audioChunks = [];
 
       mediaRecorder.ondataavailable = (e) => audioChunks.push(e.data);
-
       mediaRecorder.onstop = async () => {
         const audioBlob = new Blob(audioChunks, { type: 'audio/wav' });
         const formData = new FormData();
         formData.append('audio', audioBlob, 'command.wav');
 
         try {
-          // CALL THE GOVERNMENT BACKEND
-          const res = await axios.post('http://localhost:5001/transcribe', formData);
-          const reply = res.data.text; 
+          const BACKEND_URL = import.meta.env.VITE_API_URL || 'http://localhost:5001'; 
+          const res = await axios.post(`${BACKEND_URL}/transcribe`, formData);
+          const reply = res.data.text;
           
-          speak(`Command accepted. ${reply}`);
-          alert(`🗣️ AI LOG: "${reply}"`);
+          // Native Alert
+          alert(`🤖 AI: ${reply}`);
           
-          // TRIGGER "THE DEMO EFFECT"
           if (res.data.intent === "HAZARD_REPORT" || reply.includes("Landslide")) {
-             setRain(200); // Visuals go RED
+             setRain(200);
+             if (navigator.vibrate) navigator.vibrate([200, 100, 200]); // SOS Pattern
           }
-          setStatus("ONLINE");
-
         } catch (err) {
-          // FAILSAFE: EDGE MODE
-          console.warn("⚠️ Backend Offline. Switching to EDGE MODE.");
-          setStatus("OFFLINE (EDGE)");
-          const demoReply = "Landslide reported at Sector 4. Rerouting convoy via NH-29 Bypass.";
-          speak(`Edge Protocol Active. ${demoReply}`);
-          alert(`🗣️ (EDGE) LOG: "${demoReply}"`);
-          setRain(200); 
+          // Offline Fallback
+          alert("📡 OFFLINE: Switched to Edge Protocol. Route updated.");
+          setRain(200);
         }
         setIsListening(false);
       };
 
       mediaRecorder.start();
-      setTimeout(() => mediaRecorder.stop(), 2500); // Record for 2.5s
-
+      setTimeout(() => mediaRecorder.stop(), 2500);
     } catch (err) {
-      alert("Microphone Access Denied. Check Permissions.");
+      alert("Microphone Error or Permission Denied.");
       setIsListening(false);
-      setStatus("ERROR");
     }
   };
 
   return (
-    <div className="h-screen w-screen flex flex-col bg-slate-900 text-white font-sans overflow-hidden">
+    <div className="fixed inset-0 bg-slate-950 text-white font-sans overflow-hidden select-none">
       
-      {/* --- HEADER --- */}
-      <div className="p-4 bg-slate-800 flex justify-between items-center shadow-md z-50 shrink-0 border-b border-slate-700">
-        <h1 className="text-xl font-black flex items-center gap-2 tracking-tighter">
-          <span className="text-emerald-500">🇮🇳 RouteAI</span> <span className="text-slate-400 font-light">COMMANDER</span>
-        </h1>
+      {/* --- TOP STATUS BAR (Transparent) --- */}
+      <div className="absolute top-0 w-full z-50 p-4 flex justify-between items-start pointer-events-none bg-gradient-to-b from-black/80 to-transparent h-24">
+        <div>
+          <h1 className="text-lg font-black tracking-tighter text-white drop-shadow-md">
+            <span className="text-emerald-400">Route</span>AI
+          </h1>
+          <div className="flex items-center gap-1.5 mt-0.5">
+            <span className={`w-2 h-2 rounded-full ${rain > 150 ? "bg-red-500 animate-ping" : "bg-emerald-500"}`}></span>
+            <span className="text-[10px] font-bold text-slate-300 tracking-widest">
+              {rain > 150 ? "CRITICAL ALERT" : "SYSTEM ONLINE"}
+            </span>
+          </div>
+        </div>
         
-        <div className="flex items-center gap-4">
-           {/* STATUS BADGE */}
-           <div className={`flex items-center gap-2 px-3 py-1 rounded-full text-xs font-bold border ${status.includes("OFFLINE") ? "bg-amber-900/20 text-amber-500 border-amber-800" : "bg-emerald-900/20 text-emerald-500 border-emerald-800"}`}>
-             <div className={`w-2 h-2 rounded-full ${status.includes("OFFLINE") ? "bg-amber-500" : "bg-emerald-500 animate-pulse"}`}></div>
-             {status}
-           </div>
-
-           {/* VIEW TOGGLE */}
-           <div className="flex bg-slate-900 rounded-lg p-1 border border-slate-700">
-             <button onClick={() => setView("MAP")} className={`px-4 py-1 rounded text-xs font-bold transition-all ${view==="MAP" ? "bg-slate-700 text-white shadow" : "text-slate-500 hover:text-slate-300"}`}>MAP</button>
-             <button onClick={() => setView("DASHBOARD")} className={`px-4 py-1 rounded text-xs font-bold transition-all ${view==="DASHBOARD" ? "bg-slate-700 text-white shadow" : "text-slate-500 hover:text-slate-300"}`}>INTEL</button>
-           </div>
+        {/* Weather Badge */}
+        <div className="bg-slate-900/60 backdrop-blur-md px-3 py-1.5 rounded-full border border-white/10 flex items-center gap-2 shadow-lg">
+          <span className="text-blue-400 text-xs">🌧️</span>
+          <span className="text-xs font-bold">{rain}mm</span>
         </div>
       </div>
 
-      {/* --- MAIN LAYOUT --- */}
-      {/* FIX: Use flex-col for Mobile, flex-row for Desktop */}
-      <div className="flex flex-col md:flex-row flex-1 overflow-hidden relative">
+      {/* --- MAIN CONTENT AREA --- */}
+      <div className="w-full h-full pb-20"> {/* pb-20 makes space for bottom nav */}
         
-        {/* --- SIDEBAR (CONTROLS) --- */}
-        {/* FIX: Full width on mobile with fixed height (40vh). Fixed width (80) on desktop. */}
-        <div className="w-full h-[40vh] md:w-80 md:h-full bg-slate-800 p-4 flex flex-col gap-4 z-40 shadow-xl border-b md:border-b-0 md:border-r border-slate-700 shrink-0 overflow-y-auto">
-          
-          {/* CITY SELECTORS */}
-          <div className="space-y-3">
-             <label className="text-[10px] text-slate-500 uppercase font-bold tracking-widest">Mission Coordinates</label>
-             <div className="flex flex-col gap-2">
-               {/* START HUB */}
-               <div className="flex items-center gap-3 bg-slate-900/50 p-3 rounded border border-slate-700">
-                 <span className="text-emerald-500 text-xs">🟢</span>
-                 <select value={startHub} onChange={e => setStartHub(e.target.value)} className="bg-transparent w-full outline-none text-sm font-bold text-slate-200 cursor-pointer">
-                   {NE_HUBS.map(h => <option key={h.name} value={h.name} className="bg-slate-800">{h.name}</option>)}
-                 </select>
-               </div>
-               {/* END HUB */}
-               <div className="flex items-center gap-3 bg-slate-900/50 p-3 rounded border border-slate-700">
-                 <span className="text-red-500 text-xs">🏁</span>
-                 <select value={endHub} onChange={e => setEndHub(e.target.value)} className="bg-transparent w-full outline-none text-sm font-bold text-slate-200 cursor-pointer">
-                   {NE_HUBS.map(h => <option key={h.name} value={h.name} className="bg-slate-800">{h.name}</option>)}
-                 </select>
-               </div>
-             </div>
-          </div>
+        {activeTab === "MAP" && (
+          <div className="relative w-full h-full">
+            {/* MAP LAYER */}
+            <MapContainer center={[26.1, 92]} zoom={7} zoomControl={false} style={{ height: '100%', width: '100%', background: '#0f172a' }}>
+              <TileLayer 
+                url="https://{s}.basemaps.cartocdn.com/dark_all/{z}/{x}/{y}{r}.png" 
+                attribution='&copy; ISRO'
+              />
+              <MapRefresher path={routeData.path} />
+              
+              {/* Route Polyline */}
+              {routeData.path.length > 1 && (
+                <Polyline 
+                  positions={routeData.path.map(p => [p.lat, p.lng])} 
+                  color={routeData.details.risk === "CRITICAL" ? "#ef4444" : "#3b82f6"} 
+                  weight={6}
+                  opacity={0.9}
+                />
+              )}
 
-          {/* QUICK STATS */}
-          <div className={`p-4 rounded-xl border ${routeData.details.risk === "CRITICAL" ? "bg-red-900/20 border-red-800" : "bg-emerald-900/10 border-emerald-800"}`}>
-             <div className="flex justify-between items-center mb-2">
-                <span className="text-[10px] font-bold text-slate-400 uppercase">Est. Distance</span>
-                <span className="text-lg font-mono font-bold">{routeData.details.dist || 0} km</span>
-             </div>
-             <div className="flex justify-between items-center">
-                <span className="text-[10px] font-bold text-slate-400 uppercase">Risk Level</span>
-                <span className={`text-xs font-black px-2 py-0.5 rounded ${routeData.details.risk === "CRITICAL" ? "bg-red-500 text-white" : "bg-emerald-500 text-slate-900"}`}>
-                  {routeData.details.risk || "SAFE"}
-                </span>
-             </div>
-             {/* WARNINGS */}
-             {routeData.details.warnings?.length > 0 && (
-               <div className="mt-3 pt-2 border-t border-slate-700/50">
-                 {routeData.details.warnings.map((w, i) => (
-                   <div key={i} className="text-[10px] text-red-300 flex gap-1 mt-1">
-                     <span>⚠️</span> {w}
-                   </div>
-                 ))}
-               </div>
-             )}
-          </div>
+              {/* Markers */}
+              {NE_HUBS.map(h => (
+                <Marker key={h.name} position={[h.lat, h.lng]} icon={createIcon(h.name === startHub ? "🟢" : h.name === endHub ? "🏁" : "📍")}>
+                </Marker>
+              ))}
+            </MapContainer>
 
-          {/* RAIN SLIDER */}
-          <div className="space-y-2 bg-slate-700/30 p-4 rounded-xl border border-slate-700">
-            <div className="flex justify-between items-end">
-               <label className="text-[10px] text-slate-500 uppercase font-bold tracking-widest">IMD Rain Feed</label>
-               <span className={`text-lg font-black ${rain > 150 ? "text-red-500" : "text-blue-400"}`}>{rain}mm</span>
-            </div>
-            <input type="range" min="0" max="250" value={rain} onChange={e => setRain(parseInt(e.target.value))} className="w-full accent-blue-500 h-1 bg-slate-600 rounded-lg appearance-none cursor-pointer"/>
-          </div>
-
-          {/* VOICE BUTTON */}
-           <button 
-             onClick={handleVoice} 
-             className={`mt-auto p-4 rounded-xl font-bold text-sm flex items-center justify-center gap-3 transition-all shadow-lg hover:scale-[1.02] active:scale-95 border ${isListening ? "bg-red-600 border-red-500 text-white animate-pulse" : "bg-slate-100 border-slate-300 text-slate-900 hover:bg-white"}`}
-           >
-             <i className={`fa-solid ${isListening ? "fa-circle-notch fa-spin" : "fa-microphone"}`}></i>
-             {isListening ? "LISTENING..." : "REPORT HAZARD"}
-           </button>
-        </div>
-
-        {/* --- MAIN DISPLAY AREA --- */}
-        {/* FIX: Takes remaining height (60vh) on mobile, Full height on desktop */}
-        <div className="flex-1 relative bg-slate-950 h-[60vh] md:h-full overflow-hidden">
-          
-          {view === "MAP" ? (
-             <MapContainer center={[26.1, 92]} zoom={7} style={{ height: '100%', width: '100%', background: '#020617' }}>
-               <TileLayer 
-                 url="https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png" 
-                 attribution='&copy; ISRO Bhuvan'
-                 className="map-tiles" 
-               />
-               <MapRefresher path={routeData.path} />
-
-               {/* CITY MARKERS */}
-               {NE_HUBS.map(h => (
-                 <Marker key={h.name} position={[h.lat, h.lng]} icon={createIcon(h.name === startHub ? "🟢" : h.name === endHub ? "🏁" : "🏢")}>
-                   <Popup className="font-bold text-slate-900">{h.name}</Popup>
-                 </Marker>
-               ))}
-
-               {/* ROUTE LINE */}
-               {routeData.path.length > 1 && (
-                 <Polyline 
-                   positions={routeData.path.map(p => [p.lat, p.lng])} 
-                   color={rain > 150 ? "#10b981" : "#3b82f6"} 
-                   weight={5}
-                   opacity={0.8} 
-                   dashArray={routeData.details.risk === "CRITICAL" ? "10, 10" : null}
-                 />
-               )}
-             </MapContainer>
-          ) : (
-            // --- ANALYTICS DASHBOARD VIEW ---
-            <div className="h-full w-full p-4 md:p-8 overflow-y-auto text-slate-200">
-              <div className="max-w-5xl mx-auto">
-                <h2 className="text-3xl font-black mb-6 md:mb-8 tracking-tight flex items-center gap-3">
-                   <span className="text-blue-500 bg-blue-900/30 p-2 rounded-lg">📊</span> Tactical Intelligence
-                </h2>
+            {/* FLOATING MISSION CARD (Bottom Sheet) */}
+            <div className={`absolute bottom-4 left-4 right-4 z-[400] transition-transform duration-300 ${showControls ? "translate-y-0" : "translate-y-[120%]"}`}>
+              <div className="bg-slate-900/90 backdrop-blur-xl border border-white/10 rounded-3xl p-5 shadow-2xl">
                 
-                <div className="grid grid-cols-1 md:grid-cols-3 gap-4 md:gap-6 mb-6 md:mb-8">
-                   <div className="bg-slate-800 p-6 rounded-2xl border border-slate-700 hover:border-slate-500 transition-colors">
-                      <div className="text-slate-500 text-[10px] font-bold uppercase tracking-widest mb-1">Active Risk Index</div>
-                      <div className="text-5xl font-black text-red-400">0.84</div>
+                {/* Drag Handle */}
+                <div className="w-12 h-1 bg-slate-700 rounded-full mx-auto mb-4" onClick={() => setShowControls(!showControls)}></div>
+
+                {/* Route Selector */}
+                <div className="flex items-center gap-4 mb-5">
+                   <div className="flex flex-col items-center gap-1">
+                      <div className="w-2 h-2 bg-emerald-500 rounded-full"></div>
+                      <div className="w-0.5 h-8 bg-slate-700"></div>
+                      <div className="w-2 h-2 bg-red-500 rounded-full"></div>
                    </div>
-                   <div className="bg-slate-800 p-6 rounded-2xl border border-slate-700 hover:border-slate-500 transition-colors">
-                      <div className="text-slate-500 text-[10px] font-bold uppercase tracking-widest mb-1">Convoy Velocity</div>
-                      <div className="text-5xl font-black text-blue-400">42 <span className="text-lg text-slate-500">km/h</span></div>
-                   </div>
-                   <div className="bg-slate-800 p-6 rounded-2xl border border-slate-700 hover:border-slate-500 transition-colors">
-                      <div className="text-slate-500 text-[10px] font-bold uppercase tracking-widest mb-1">Network Health</div>
-                      <div className="text-5xl font-black text-emerald-400">98%</div>
+                   <div className="flex-1 space-y-3">
+                      <select 
+                        value={startHub} 
+                        onChange={e => setStartHub(e.target.value)} 
+                        className="w-full bg-slate-800/50 text-white text-sm font-bold p-2 rounded-lg border-none outline-none focus:ring-2 focus:ring-emerald-500/50 transition-all"
+                      >
+                        {NE_HUBS.map(h => <option key={h.name} value={h.name}>{h.name}</option>)}
+                      </select>
+                      <select 
+                        value={endHub} 
+                        onChange={e => setEndHub(e.target.value)} 
+                        className="w-full bg-slate-800/50 text-white text-sm font-bold p-2 rounded-lg border-none outline-none focus:ring-2 focus:ring-red-500/50 transition-all"
+                      >
+                        {NE_HUBS.map(h => <option key={h.name} value={h.name}>{h.name}</option>)}
+                      </select>
                    </div>
                 </div>
 
-                {/* THE BIG CHART */}
-                {/* FIX: Height adjusted for Mobile (300px) vs Desktop (450px) */}
-                <div className="bg-slate-800 p-4 md:p-8 rounded-2xl border border-slate-700 h-[300px] md:h-[450px] flex flex-col shadow-2xl mb-8">
-                  <h3 className="font-bold text-slate-400 mb-6 uppercase tracking-widest text-xs flex justify-between">
-                    <span>Landslide Probability Forecast (24h)</span>
-                    <span className="text-slate-600">SOURCE: RANDOM FOREST v1.2</span>
-                  </h3>
-                  <div className="flex-1 min-h-0 w-full"> 
-                    <ResponsiveContainer width="100%" height="100%">
-                      <BarChart data={[
-                        { time: '0600', risk: 10 }, { time: '0900', risk: 25 },
-                        { time: '1200', risk: 45 }, { time: '1500', risk: 75 },
-                        { time: '1800', risk: 90 }, { time: '2100', risk: 60 },
-                        { time: '0000', risk: 30 },
-                      ]}>
-                        <XAxis dataKey="time" axisLine={false} tickLine={false} tick={{fill: '#64748b', fontSize: 12}} />
-                        <YAxis axisLine={false} tickLine={false} tick={{fill: '#64748b', fontSize: 12}} />
-                        <Tooltip 
-                          cursor={{fill: '#334155'}} 
-                          contentStyle={{backgroundColor: '#1e293b', borderRadius: '8px', border: '1px solid #334155', color: '#fff'}} 
-                        />
-                        <Bar dataKey="risk" fill="#ef4444" radius={[6,6,0,0]} barSize={50} />
-                      </BarChart>
-                    </ResponsiveContainer>
+                {/* Route Stats Row */}
+                <div className="flex items-center justify-between border-t border-white/5 pt-4">
+                  <div>
+                    <div className="text-[10px] text-slate-400 font-bold uppercase tracking-wider">Distance</div>
+                    <div className="text-xl font-black text-white">{routeData.details.dist} <span className="text-sm text-slate-500">km</span></div>
+                  </div>
+                  <div>
+                    <div className="text-[10px] text-slate-400 font-bold uppercase tracking-wider text-right">Risk Level</div>
+                    <div className={`text-sm font-black px-3 py-1 rounded-full ${routeData.details.risk === "CRITICAL" ? "bg-red-500/20 text-red-400 border border-red-500/30" : "bg-emerald-500/20 text-emerald-400 border border-emerald-500/30"}`}>
+                      {routeData.details.risk || "CALCULATING"}
+                    </div>
                   </div>
                 </div>
               </div>
             </div>
-          )}
-        </div>
+          </div>
+        )}
+
+        {activeTab === "INTEL" && (
+          <div className="w-full h-full overflow-y-auto bg-slate-950 p-5 space-y-6 pt-24">
+             {/* Header */}
+             <div>
+               <h2 className="text-2xl font-black text-white">Tactical Intel</h2>
+               <p className="text-slate-400 text-sm">Real-time convoy analysis</p>
+             </div>
+
+             {/* Big Score Card */}
+             <div className="p-6 rounded-3xl bg-gradient-to-br from-slate-800 to-slate-900 border border-white/5 shadow-xl relative overflow-hidden">
+                <div className="absolute top-0 right-0 p-3 opacity-10 text-9xl">🛡️</div>
+                <div className="relative z-10">
+                   <div className="text-xs font-bold text-slate-400 uppercase tracking-widest mb-1">Safety Index</div>
+                   <div className="text-5xl font-black text-white">84<span className="text-2xl text-emerald-500">.2</span></div>
+                   <div className="mt-4 flex gap-2">
+                      <span className="px-2 py-1 bg-emerald-500/10 text-emerald-400 text-[10px] font-bold rounded">STABLE</span>
+                      <span className="px-2 py-1 bg-blue-500/10 text-blue-400 text-[10px] font-bold rounded">AI ACTIVE</span>
+                   </div>
+                </div>
+             </div>
+
+             {/* Grid Stats */}
+             <div className="grid grid-cols-2 gap-4">
+                <div className="bg-slate-900 p-4 rounded-2xl border border-white/5">
+                   <div className="text-blue-400 text-xl mb-2">⚡</div>
+                   <div className="text-2xl font-bold">42 <span className="text-xs text-slate-500">km/h</span></div>
+                   <div className="text-[10px] text-slate-500 font-bold uppercase">Avg Velocity</div>
+                </div>
+                <div className="bg-slate-900 p-4 rounded-2xl border border-white/5">
+                   <div className="text-purple-400 text-xl mb-2">📡</div>
+                   <div className="text-2xl font-bold">98 <span className="text-xs text-slate-500">%</span></div>
+                   <div className="text-[10px] text-slate-500 font-bold uppercase">Net Strength</div>
+                </div>
+             </div>
+
+             {/* Chart Card */}
+             <div className="bg-slate-900 p-5 rounded-3xl border border-white/5 shadow-lg">
+                <div className="flex justify-between items-center mb-4">
+                  <h3 className="text-xs font-bold text-slate-300 uppercase">Risk Forecast</h3>
+                  <select className="bg-black/20 text-[10px] text-slate-400 px-2 py-1 rounded">
+                    <option>24 Hours</option>
+                  </select>
+                </div>
+                <div className="h-48 w-full">
+                  <ResponsiveContainer width="100%" height="100%">
+                    <AreaChart data={[
+                        { time: '06', risk: 10 }, { time: '09', risk: 25 },
+                        { time: '12', risk: 45 }, { time: '15', risk: 75 },
+                        { time: '18', risk: 90 }, { time: '21', risk: 60 }
+                      ]}>
+                      <defs>
+                        <linearGradient id="colorRisk" x1="0" y1="0" x2="0" y2="1">
+                          <stop offset="5%" stopColor="#ef4444" stopOpacity={0.3}/>
+                          <stop offset="95%" stopColor="#ef4444" stopOpacity={0}/>
+                        </linearGradient>
+                      </defs>
+                      <XAxis dataKey="time" axisLine={false} tickLine={false} tick={{fill: '#475569', fontSize: 10}} />
+                      <Tooltip contentStyle={{backgroundColor: '#1e293b', border: 'none', borderRadius: '8px'}} itemStyle={{color: '#fff'}} />
+                      <Area type="monotone" dataKey="risk" stroke="#ef4444" strokeWidth={3} fillOpacity={1} fill="url(#colorRisk)" />
+                    </AreaChart>
+                  </ResponsiveContainer>
+                </div>
+             </div>
+             
+             {/* Bottom Spacer */}
+             <div className="h-12"></div>
+          </div>
+        )}
       </div>
+
+      {/* --- NATIVE BOTTOM NAVIGATION BAR --- */}
+      <div className="fixed bottom-0 w-full h-20 bg-slate-950/90 backdrop-blur-lg border-t border-white/5 flex justify-around items-center px-6 z-[500] pb-2">
+         {/* Map Tab */}
+         <button 
+           onClick={() => setActiveTab("MAP")} 
+           className={`flex flex-col items-center gap-1 transition-all duration-300 ${activeTab === "MAP" ? "text-blue-400 scale-110" : "text-slate-600"}`}
+         >
+            <div className={`text-xl ${activeTab === "MAP" ? "drop-shadow-[0_0_10px_rgba(59,130,246,0.5)]" : ""}`}>🗺️</div>
+            <span className="text-[10px] font-bold">Map</span>
+         </button>
+
+         {/* VOICE FAB (Center) */}
+         <button 
+           onClick={handleVoice}
+           className={`relative -top-5 w-16 h-16 rounded-full flex items-center justify-center shadow-2xl transition-all active:scale-95 ${isListening ? "bg-red-500 scale-110 animate-pulse ring-4 ring-red-500/30" : "bg-gradient-to-r from-blue-600 to-indigo-600 ring-4 ring-slate-950"}`}
+         >
+            <i className={`fa-solid ${isListening ? "fa-microphone-lines text-2xl" : "fa-microphone text-xl"} text-white`}></i>
+         </button>
+
+         {/* Intel Tab */}
+         <button 
+           onClick={() => setActiveTab("INTEL")} 
+           className={`flex flex-col items-center gap-1 transition-all duration-300 ${activeTab === "INTEL" ? "text-emerald-400 scale-110" : "text-slate-600"}`}
+         >
+            <div className={`text-xl ${activeTab === "INTEL" ? "drop-shadow-[0_0_10px_rgba(16,185,129,0.5)]" : ""}`}>📊</div>
+            <span className="text-[10px] font-bold">Intel</span>
+         </button>
+      </div>
+
     </div>
   );
 }
